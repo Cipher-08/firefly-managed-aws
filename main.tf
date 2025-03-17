@@ -1,7 +1,13 @@
-# Define provider
+variable "gcp_service_account_key" {
+  description = "Base64 encoded GCP service account key"
+  type        = string
+  sensitive   = true
+}
+
 provider "google" {
-  project = var.gcp_project_id
-  region  = var.gcp_region
+  credentials = jsondecode(base64decode(var.gcp_service_account_key))
+  project     = "content-gen-418510"
+  region      = "us-central1"
 }
 
 # Variables for flexibility
