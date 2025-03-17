@@ -7,7 +7,7 @@ provider "google" {
 # Variables for flexibility
 variable "gcp_project_id" {
   description = "GCP Project ID"
-  default = " 411fd6f1a80469451e9e217a86c54d3c2ab09103 "
+  default = " 411fd6f1a80469451e9e217a86c54d3c2ab09103"
   type        = string
 }
 
