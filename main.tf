@@ -1,20 +1,15 @@
-# Provider block - Automatically detects GCP credentials from different sources
+# Define provider with service account authentication
 provider "google" {
-  credentials = jsondecode(
-    fileexists("~/.gcp/service-account.json") ? file("~/.gcp/service-account.json") :
-    (length(var.gcp_service_account_key) > 0 ? base64decode(var.gcp_service_account_key) :
-    file(env("GOOGLE_APPLICATION_CREDENTIALS")))
-  )
-  project = var.gcp_project_id
-  region  = var.gcp_region
+  credentials = jsondecode(base64decode(var.gcp_service_account_key))
+  project     = var.gcp_project_id
+  region      = var.gcp_region
 }
 
 # Variables
 variable "gcp_service_account_key" {
-  description = "Base64 encoded GCP service account key"
+  description = "Base64 encoded GCP service account key (stored in GitHub Actions Secrets)"
   type        = string
   sensitive   = true
-  default     = ""  # This ensures Terraform doesn't fail if the key is missing
 }
 
 variable "gcp_project_id" {
