@@ -12,25 +12,25 @@ variable "gcp_project_id" {
 }
 
 variable "gcp_region" {
-  description = "Default region for resources"
+  description = "GCP Region"
   type        = string
   default     = "us-central1"
 }
 
 variable "gcp_zone" {
-  description = "Default zone for compute instance"
+  description = "GCP Zone"
   type        = string
   default     = "us-central1-a"
 }
 
-# Create VPC
+# 1. Create VPC
 resource "google_compute_network" "gcp_vpc_main" {
   name                    = "gcp-vpc-main"
   auto_create_subnetworks = false
   description             = "Main VPC network for the project"
 }
 
-# Create Subnet
+# 2. Create Subnet (Depends on VPC)
 resource "google_compute_subnetwork" "gcp_subnet_private" {
   name          = "gcp-subnet-private"
   network       = google_compute_network.gcp_vpc_main.id
@@ -39,13 +39,14 @@ resource "google_compute_subnetwork" "gcp_subnet_private" {
   description   = "Private subnet within VPC"
 }
 
-# IAM Service Account
+# 3. Create IAM Service Account (Depends on VPC)
 resource "google_service_account" "gcp_sa_compute" {
   account_id   = "gcp-sa-compute"
   display_name = "Compute Engine Service Account"
+  depends_on   = [google_compute_network.gcp_vpc_main]
 }
 
-# IAM Role Binding for Compute Instance
+# 4. Attach IAM Role to Service Account (Depends on SA)
 resource "google_project_iam_binding" "gcp_compute_iam" {
   project = var.gcp_project_id
   role    = "roles/compute.admin"
@@ -53,9 +54,11 @@ resource "google_project_iam_binding" "gcp_compute_iam" {
   members = [
     "serviceAccount:${google_service_account.gcp_sa_compute.email}"
   ]
+
+  depends_on = [google_service_account.gcp_sa_compute]
 }
 
-# Compute Engine Instance
+# 5. Compute Instance (Depends on IAM and Network)
 resource "google_compute_instance" "gcp_vm_app" {
   name         = "gcp-vm-app"
   machine_type = "e2-medium"
@@ -82,13 +85,19 @@ resource "google_compute_instance" "gcp_vm_app" {
   }
 
   metadata = {
-    enable-oslogin = "TRUE"  # Uses OS Login instead of SSH keys
+    enable-oslogin = "TRUE"
   }
 
   tags = ["gcp-vm", "secure"]
+
+  depends_on = [
+    google_compute_network.gcp_vpc_main,
+    google_compute_subnetwork.gcp_subnet_private,
+    google_project_iam_binding.gcp_compute_iam
+  ]
 }
 
-# Output External IP
+# 6. Output External IP
 output "gcp_vm_external_ip" {
   description = "Public IP of the compute instance"
   value       = google_compute_instance.gcp_vm_app.network_interface[0].access_config[0].nat_ip
