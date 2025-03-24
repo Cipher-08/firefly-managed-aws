@@ -1,111 +1,74 @@
-# Define provider with service account authentication
-provider "google" {
-  credentials = jsondecode(base64decode(var.gcp_service_account_key))
-  project     = var.gcp_project_id
-  region      = var.gcp_region
+provider "azurerm" {
+  features {}
+
+  subscription_id = "${var.subscription_id}"
+  client_id       = "${var.client_id}"
+  client_secret   = "${var.client_secret}"
+  tenant_id       = "${var.tenant_id}"
 }
 
-# Variables
-variable "gcp_service_account_key" {
-  description = "Base64 encoded GCP service account key (stored in GitHub Actions Secrets)"
+# Define Variables
+variable "subscription_id" {
+  description = "Azure Subscription ID"
+  type        = string
+}
+
+variable "client_id" {
+  description = "Azure Client ID"
+  type        = string
+}
+
+variable "client_secret" {
+  description = "Azure Client Secret"
   type        = string
   sensitive   = true
 }
 
-variable "gcp_project_id" {
-  description = "GCP Project ID"
+variable "tenant_id" {
+  description = "Azure Tenant ID"
   type        = string
-  default     = "content-gen-418510"
 }
 
-variable "gcp_region" {
-  description = "GCP Region"
-  type        = string
-  default     = "us-central1"
+# Terraform Backend (Optional: If Storing State in Azure)
+terraform {
+  required_version = ">= 1.0"
 }
 
-variable "gcp_zone" {
-  description = "GCP Zone"
-  type        = string
-  default     = "us-central1-a"
+# Resource Group
+resource "azurerm_resource_group" "rg" {
+  name     = "rg-firefly"
+  location = "East US"
 }
 
-# 1️⃣ Create VPC
-resource "google_compute_network" "gcp_vpc_main" {
-  name                    = "gcp-vpc-main"
-  auto_create_subnetworks = false
-  description             = "Main VPC network for the project"
+# Virtual Network
+resource "azurerm_virtual_network" "vnet" {
+  name                = "vnet-firefly"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  address_space       = ["10.0.0.0/16"]
 }
 
-# 2️⃣ Create Subnet (Depends on VPC)
-resource "google_compute_subnetwork" "gcp_subnet_private" {
-  name          = "gcp-subnet-private"
-  network       = google_compute_network.gcp_vpc_main.id
-  ip_cidr_range = "10.10.0.0/24"
-  region        = var.gcp_region
-  description   = "Private subnet within VPC"
+# Subnet
+resource "azurerm_subnet" "subnet" {
+  name                 = "subnet-firefly"
+  resource_group_name  = azurerm_resource_group.rg.name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+  address_prefixes     = ["10.0.1.0/24"]
 }
 
-# 3️⃣ Create IAM Service Account (Depends on VPC)
-resource "google_service_account" "gcp_sa_compute" {
-  account_id   = "gcp-sa-compute"
-  display_name = "Compute Engine Service Account"
-  depends_on   = [google_compute_network.gcp_vpc_main]
+# Storage Account
+resource "azurerm_storage_account" "storage" {
+  name                     = "storagefirefly123"
+  resource_group_name      = azurerm_resource_group.rg.name
+  location                 = azurerm_resource_group.rg.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
 }
 
-# 4️⃣ Attach IAM Role to Service Account (Depends on SA)
-resource "google_project_iam_binding" "gcp_compute_iam" {
-  project = var.gcp_project_id
-  role    = "roles/compute.admin"
-
-  members = [
-    "serviceAccount:${google_service_account.gcp_sa_compute.email}"
-  ]
-
-  depends_on = [google_service_account.gcp_sa_compute]
-}
-
-# 5️⃣ Compute Engine Instance (Depends on IAM and Network)
-resource "google_compute_instance" "gcp_vm_app" {
-  name         = "gcp-vm-app"
-  machine_type = "e2-medium"
-  zone         = var.gcp_zone
-
-  boot_disk {
-    initialize_params {
-      image = "debian-cloud/debian-11"
-    }
-  }
-
-  network_interface {
-    network    = google_compute_network.gcp_vpc_main.id
-    subnetwork = google_compute_subnetwork.gcp_subnet_private.id
-
-    access_config {
-      # Enables external IP
-    }
-  }
-
-  service_account {
-    email  = google_service_account.gcp_sa_compute.email
-    scopes = ["cloud-platform"]
-  }
-
-  metadata = {
-    enable-oslogin = "TRUE"
-  }
-
-  tags = ["gcp-vm", "secure"]
-
-  depends_on = [
-    google_compute_network.gcp_vpc_main,
-    google_compute_subnetwork.gcp_subnet_private,
-    google_project_iam_binding.gcp_compute_iam
-  ]
-}
-
-# 6️⃣ Output External IP
-output "gcp_vm_external_ip" {
-  description = "Public IP of the compute instance"
-  value       = google_compute_instance.gcp_vm_app.network_interface[0].access_config[0].nat_ip
+# Public IP
+resource "azurerm_public_ip" "public_ip" {
+  name                = "public-ip-firefly"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  allocation_method   = "Static"
 }
