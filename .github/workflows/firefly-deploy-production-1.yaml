@@ -1,5 +1,6 @@
 name: Deploy production-1 Terraform Workspace
-"on":
+
+on:
     push:
         branches:
             - main
@@ -12,6 +13,7 @@ name: Deploy production-1 Terraform Workspace
                 description: Should apply Terraform changes?
                 type: boolean
                 default: false
+
 jobs:
     deploy:
         name: Deploy Terraform Workspace
@@ -28,6 +30,7 @@ jobs:
               uses: actions/checkout@v4
               with:
                 fetch-depth: 0
+
             - name: Set deployment parameters
               id: set-params
               run: |-
@@ -38,22 +41,34 @@ jobs:
                 else
                   echo "apply=false" >> $GITHUB_OUTPUT
                 fi
+
             - name: Setup Terraform
               uses: hashicorp/setup-terraform@v3
               with:
                 terraform_version: 1.9.5
                 terraform_wrapper: false
+
             - name: Initialize Terraform
               id: init
               run: |-
                 terraform init >& init.log
                 terraform workspace new production || terraform workspace select production
               continue-on-error: true
+
             - name: Terraform Plan
               id: plan
               if: steps.init.outcome == 'success'
-              run: terraform plan -json -out=tf.plan > plan_log.jsonl && terraform show -json tf.plan > plan_output.json && terraform show tf.plan > plan_output_raw.log
+              run: |
+                terraform plan \
+                  -var "subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+                  -var "client_id=${{ secrets.AZURE_CLIENT_ID }}" \
+                  -var "client_secret=${{ secrets.AZURE_CLIENT_SECRET }}" \
+                  -var "tenant_id=${{ secrets.AZURE_TENANT_ID }}" \
+                  -json -out=tf.plan > plan_log.jsonl
+                terraform show -json tf.plan > plan_output.json
+                terraform show tf.plan > plan_output_raw.log
               continue-on-error: true
+
             - name: Firefly Post Plan
               uses: gofireflyio/fireflyci@v0.5.101
               with:
@@ -64,10 +79,18 @@ jobs:
                 plan-output-file: plan_output.json
                 plan-raw-log-file: plan_output_raw.log
                 workspace: production-1
+
             - name: Terraform Apply
               if: steps.set-params.outputs.apply == 'true' && steps.plan.outcome == 'success'
-              run: terraform apply -auto-approve -json > apply_log.jsonl
+              run: |
+                terraform apply -auto-approve \
+                  -var "subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+                  -var "client_id=${{ secrets.AZURE_CLIENT_ID }}" \
+                  -var "client_secret=${{ secrets.AZURE_CLIENT_SECRET }}" \
+                  -var "tenant_id=${{ secrets.AZURE_TENANT_ID }}" \
+                  -json > apply_log.jsonl
               continue-on-error: true
+
             - name: Firefly Post Apply
               if: steps.set-params.outputs.apply == 'true' && steps.plan.outcome == 'success'
               uses: gofireflyio/fireflyci@v0.5.101
