@@ -12,7 +12,8 @@ provider "azurerm" {
   client_id       = var.client_id
   client_secret   = var.client_secret
   tenant_id       = var.tenant_id
-  features        = {}
+
+  features {}  # <-- This is now correctly written as a block
 }
 
 variable "subscription_id" { default = "" }
