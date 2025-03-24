@@ -46,7 +46,12 @@ jobs:
         run: terraform init
 
       - name: Terraform Plan
-        run: terraform plan
+        run: |
+          terraform plan \
+            -var "subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+            -var "client_id=${{ secrets.AZURE_CLIENT_ID }}" \
+            -var "client_secret=${{ secrets.AZURE_CLIENT_SECRET }}" \
+            -var "tenant_id=${{ secrets.AZURE_TENANT_ID }}"
 
       - name: Firefly Post Plan
         uses: gofireflyio/fireflyci@v0.5.101
@@ -56,7 +61,12 @@ jobs:
 
       - name: Terraform Apply
         if: github.event_name == 'push'
-        run: terraform apply -auto-approve
+        run: |
+          terraform apply -auto-approve \
+            -var "subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+            -var "client_id=${{ secrets.AZURE_CLIENT_ID }}" \
+            -var "client_secret=${{ secrets.AZURE_CLIENT_SECRET }}" \
+            -var "tenant_id=${{ secrets.AZURE_TENANT_ID }}"
 
       - name: Firefly Post Apply
         if: github.event_name == 'push'
