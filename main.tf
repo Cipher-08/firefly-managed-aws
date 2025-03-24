@@ -11,6 +11,13 @@ provider "azurerm" {
   client_secret   = var.client_secret
 }
 
+variable "location" {
+  description = "Azure region for deployment"
+  type        = string
+  default     = "East US"
+}
+
+
 variable "tenant_id" {
   description = "Azure Tenant ID"
   type        = string
