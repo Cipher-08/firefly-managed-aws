@@ -2,65 +2,60 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 3.0"
+      version = "~>3.0"
     }
   }
 }
 
 provider "azurerm" {
-  features {}
-
   subscription_id = var.subscription_id
   client_id       = var.client_id
   client_secret   = var.client_secret
   tenant_id       = var.tenant_id
+  features        = {}
 }
 
-# 🔹 Variables (Injected from GitHub Secrets)
-variable "subscription_id" {}
-variable "client_id" {}
-variable "client_secret" {}
-variable "tenant_id" {}
-variable "resource_group_name" {
-  default = "myResourceGroup"
-}
-variable "location" {
-  default = "East US"
-}
+variable "subscription_id" { default = "" }
+variable "client_id" { default = "" }
+variable "client_secret" { default = "" }
+variable "tenant_id" { default = "" }
+variable "location" { default = "East US" }
 
-# 🔹 1️⃣ Create a Resource Group
-resource "azurerm_resource_group" "rg" {
-  name     = var.resource_group_name
+resource "azurerm_resource_group" "main" {
+  name     = "rg-main"
   location = var.location
 }
 
-# 🔹 2️⃣ Create a Virtual Network
+resource "azurerm_storage_account" "storage" {
+  name                     = "mystorageacc123"
+  resource_group_name      = azurerm_resource_group.main.name
+  location                 = azurerm_resource_group.main.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+}
+
 resource "azurerm_virtual_network" "vnet" {
-  name                = "myVNet"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+  name                = "main-vnet"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
   address_space       = ["10.0.0.0/16"]
 }
 
-# 🔹 3️⃣ Create a Subnet (Inside VNet)
 resource "azurerm_subnet" "subnet" {
-  name                 = "mySubnet"
-  resource_group_name  = azurerm_resource_group.rg.name
+  name                 = "main-subnet"
+  resource_group_name  = azurerm_resource_group.main.name
   virtual_network_name = azurerm_virtual_network.vnet.name
   address_prefixes     = ["10.0.1.0/24"]
 }
 
-# 🔹 4️⃣ Create a Public IP
-resource "azurerm_public_ip" "public_ip" {
-  name                = "myPublicIP"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
-  allocation_method   = "Dynamic"
-}
+resource "azurerm_network_interface" "nic" {
+  name                = "nic-main"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
 
-# 🔹 5️⃣ Create a Network Security Group
-resource "azurerm_network_security_group" "nsg" {
-  name                = "myNSG"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = azurerm_subnet.subnet.id
+    private_ip_address_allocation = "Dynamic"
+  }
 }
