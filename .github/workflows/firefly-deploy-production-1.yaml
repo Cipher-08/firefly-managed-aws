@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       apply:
-        description: Should apply Terraform changes?
+        description: "Should apply Terraform changes?"
         type: boolean
         default: false
 
@@ -22,16 +22,19 @@ jobs:
       contents: read
       id-token: write
     env:
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-    
+      FIREFLY_ACCESS_KEY: ${{ secrets.FIREFLY_ACCESS_KEY }}
+      FIREFLY_SECRET_KEY: ${{ secrets.FIREFLY_SECRET_KEY }}
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+
+      - name: Set Terraform Environment Variables
+        run: |
+          echo "TF_VAR_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+          echo "TF_VAR_client_id=${{ secrets.AZURE_CLIENT_ID }}" >> $GITHUB_ENV
+          echo "TF_VAR_client_secret=${{ secrets.AZURE_CLIENT_SECRET }}" >> $GITHUB_ENV
+          echo "TF_VAR_tenant_id=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -39,24 +42,25 @@ jobs:
           terraform_version: 1.9.5
           terraform_wrapper: false
 
-      - name: Initialize Terraform
-        run: |
-          terraform init
-          terraform workspace new production || terraform workspace select production
+      - name: Terraform Init
+        run: terraform init
 
       - name: Terraform Plan
-        run: |
-          terraform plan \
-            -var "subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
-            -var "client_id=${{ secrets.AZURE_CLIENT_ID }}" \
-            -var "client_secret=${{ secrets.AZURE_CLIENT_SECRET }}" \
-            -var "tenant_id=${{ secrets.AZURE_TENANT_ID }}"
+        run: terraform plan
+
+      - name: Firefly Post Plan
+        uses: gofireflyio/fireflyci@v0.5.101
+        with:
+          command: post-plan
+          workspace: production
 
       - name: Terraform Apply
-        if: github.event_name == 'push' || github.event.inputs.apply == 'true'
-        run: |
-          terraform apply -auto-approve \
-            -var "subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
-            -var "client_id=${{ secrets.AZURE_CLIENT_ID }}" \
-            -var "client_secret=${{ secrets.AZURE_CLIENT_SECRET }}" \
-            -var "tenant_id=${{ secrets.AZURE_TENANT_ID }}"
+        if: github.event_name == 'push'
+        run: terraform apply -auto-approve
+
+      - name: Firefly Post Apply
+        if: github.event_name == 'push'
+        uses: gofireflyio/fireflyci@v0.5.101
+        with:
+          command: post-apply
+          workspace: production
