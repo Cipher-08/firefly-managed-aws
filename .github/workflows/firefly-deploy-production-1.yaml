@@ -1,0 +1,76 @@
+name: Deploy Terraform
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Should apply Terraform changes?"
+        type: boolean
+        default: false
+
+jobs:
+  deploy:
+    name: Deploy Terraform
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      FIREFLY_ACCESS_KEY: ${{ secrets.FIREFLY_ACCESS_KEY }}
+      FIREFLY_SECRET_KEY: ${{ secrets.FIREFLY_SECRET_KEY }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set Terraform Environment Variables
+        run: |
+          echo "TF_VAR_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+          echo "TF_VAR_client_id=${{ secrets.AZURE_CLIENT_ID }}" >> $GITHUB_ENV
+          echo "TF_VAR_client_secret=${{ secrets.AZURE_CLIENT_SECRET }}" >> $GITHUB_ENV
+          echo "TF_VAR_tenant_id=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.5
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        run: |
+          terraform plan \
+            -var "subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+            -var "client_id=${{ secrets.AZURE_CLIENT_ID }}" \
+            -var "client_secret=${{ secrets.AZURE_CLIENT_SECRET }}" \
+            -var "tenant_id=${{ secrets.AZURE_TENANT_ID }}"
+
+      - name: Firefly Post Plan
+        uses: gofireflyio/fireflyci@v0.5.101
+        with:
+          command: post-plan
+          workspace: production
+
+      - name: Terraform Apply
+        if: github.event_name == 'push'
+        run: |
+          terraform apply -auto-approve \
+            -var "subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+            -var "client_id=${{ secrets.AZURE_CLIENT_ID }}" \
+            -var "client_secret=${{ secrets.AZURE_CLIENT_SECRET }}" \
+            -var "tenant_id=${{ secrets.AZURE_TENANT_ID }}"
+
+      - name: Firefly Post Apply
+        if: github.event_name == 'push'
+        uses: gofireflyio/fireflyci@v0.5.101
+        with:
+          command: post-apply
+          workspace: production
